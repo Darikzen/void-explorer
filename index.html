@@ -1,0 +1,763 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Void</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;700&display=swap');
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            overflow: hidden;
+            background: #0a0a0a;
+            cursor: none;
+        }
+        
+        canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+        
+        @keyframes colorWave {
+            0% { opacity: 1; }
+            50% { opacity: 0.95; }
+            100% { opacity: 1; }
+        }
+        
+        #textLayer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            font-family: 'Cinzel', serif;
+            font-weight: 400;
+            font-size: 14px;
+            line-height: 1.4;
+            pointer-events: none;
+            z-index: 1;
+            --mouse-x: 50%;
+            --mouse-y: 50%;
+            -webkit-mask-image: radial-gradient(circle 175px at var(--mouse-x) var(--mouse-y), black 0%, black 70%, transparent 100%);
+            mask-image: radial-gradient(circle 175px at var(--mouse-x) var(--mouse-y), black 0%, black 70%, transparent 100%);
+            animation: colorWave 12s ease-in-out infinite;
+            letter-spacing: 0.5px;
+        }
+        
+        #edgeLayer {
+            z-index: 2;
+        }
+        
+        #layer1 { z-index: 10; }
+        #layer2 { z-index: 11; }
+        #layer3 { z-index: 12; }
+        #layer4 { z-index: 13; }
+        
+        .text-line {
+            display: block;
+            margin-bottom: 0;
+            text-align: justify;
+            text-align-last: justify;
+            -moz-text-align-last: justify;
+        }
+        
+        .text-line::after {
+            content: "";
+            display: inline-block;
+            width: 100%;
+        }
+        
+        .glitch {
+            color: #111;
+            font-weight: 500;
+        }
+        
+        /* Text formatting styles */
+        .word-italic {
+            font-style: italic;
+        }
+        
+        .word-bold {
+            font-weight: 700;
+        }
+        
+        .word-smallcaps {
+            font-variant: small-caps;
+            font-size: 0.95em;
+        }
+        
+        .word-spaced {
+            letter-spacing: 3px;
+        }
+        
+        /* Refresh links - grayscale, subtle underline */
+        .word-link {
+            pointer-events: auto;
+            cursor: pointer;
+            text-decoration: underline;
+            text-decoration-style: dotted;
+            text-underline-offset: 3px;
+            transition: text-decoration-color 0.3s ease;
+        }
+        
+        .word-link:hover {
+            text-decoration-style: solid;
+        }
+        
+        #cursor {
+            position: fixed;
+            width: 20px;
+            height: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            pointer-events: none;
+            transform: translate(-50%, -50%);
+            transition: width 0.2s, height 0.2s;
+            z-index: 1000;
+        }
+        
+        #cursor.active {
+            width: 40px;
+            height: 40px;
+        }
+    </style>
+</head>
+<body>
+    <div id="cursor"></div>
+    <canvas id="vignetteLayer"></canvas>
+    <canvas id="edgeLayer"></canvas>
+    <div id="textLayer"></div>
+    <canvas id="layer1"></canvas>
+    <canvas id="layer2"></canvas>
+    <canvas id="layer3"></canvas>
+    <canvas id="layer4"></canvas>
+
+    <script>
+        // Cursor element
+        const cursorEl = document.getElementById('cursor');
+        let mouseX = window.innerWidth / 2;
+        let mouseY = window.innerHeight / 2;
+        let prevMouseX = mouseX;
+        let prevMouseY = mouseY;
+        let cursorActive = false;
+        
+        // Cursor velocity tracking
+        let cursorVelocity = 0;
+        let smoothedVelocity = 0;
+        let movementAngle = 0;
+        
+        // Wave propagation state
+        let waveOrigin = 0;
+        let waveProgress = 0;
+        let waveActive = false;
+        let waveIntensity = 0;
+        
+        // Spotlight position
+        let spotlightX = mouseX;
+        let spotlightY = mouseY;
+        const spotlightDragFactor = 0.06;
+
+        // Mouse tracking
+        document.addEventListener('mousemove', (e) => {
+            prevMouseX = mouseX;
+            prevMouseY = mouseY;
+            mouseX = e.clientX;
+            mouseY = e.clientY;
+            cursorEl.style.left = mouseX + 'px';
+            cursorEl.style.top = mouseY + 'px';
+            
+            const dx = mouseX - prevMouseX;
+            const dy = mouseY - prevMouseY;
+            cursorVelocity = Math.sqrt(dx * dx + dy * dy);
+            
+            if (cursorVelocity > 0.5) {
+                movementAngle = Math.atan2(dy, dx);
+                
+                if (cursorVelocity > 8 && !waveActive) {
+                    waveActive = true;
+                    waveProgress = 0;
+                    waveOrigin = movementAngle;
+                    waveIntensity = Math.min(cursorVelocity / 20, 1);
+                }
+            }
+        });
+
+        document.addEventListener('mousedown', () => {
+            cursorActive = true;
+            cursorEl.classList.add('active');
+        });
+
+        document.addEventListener('mouseup', () => {
+            cursorActive = false;
+            cursorEl.classList.remove('active');
+        });
+
+        // Word lists
+        const fragments = [
+            'beneath', 'shadow', 'whisper', 'void', 'eternal', 'descent', 'truth', 'lies',
+            'forgotten', 'echo', 'silence', 'threshold', 'between', 'veil', 'witness',
+            'cipher', 'remnant', 'passage', 'deep', 'hollow', 'fragment', 'endless',
+            'drift', 'consume', 'reveal', 'obscure', 'manifest', 'dissolve', 'emerge',
+            'substrate', 'nexus', 'terminus', 'aperture', 'meridian', 'confluence'
+        ];
+
+        const cyrillicWords = [
+            'тень', 'бездна', 'шёпот', 'пустота', 'вечность', 'истина', 'забвение',
+            'эхо', 'тишина', 'порог', 'завеса', 'свидетель', 'шифр', 'остаток',
+            'проход', 'глубина', 'фрагмент', 'дрейф', 'поглощать', 'явление'
+        ];
+
+        const japaneseWords = [
+            '影', '深淵', 'ささやき', '虚空', '永遠', '真実', '忘却',
+            'こだま', '沈黙', '境界', 'ベール', '証人', '暗号', '残骸',
+            '通路', '深み', 'かけら', '漂流', '消費', '現れ'
+        ];
+
+        const chineseWords = [
+            '陰影', '深淵', '低語', '虛空', '永恆', '真理', '遺忘',
+            '回音', '寂靜', '門檻', '面紗', '見證', '密碼', '殘餘',
+            '通道', '深處', '碎片', '漂流', '吞噬', '顯現'
+        ];
+
+        const symbols = ['·', '•', '◦', '∴', '∵', '⋮', '⋯', '…', '-', '—'];
+        
+        // GRAYSCALE - range 0x00 to 0xCC
+        function getWordColor() {
+            const min = 0x00;
+            const max = 0xCC;
+            const gray = Math.floor(Math.random() * (max - min + 1)) + min;
+            const hex = gray.toString(16).padStart(2, '0');
+            return `#${hex}${hex}${hex}`;
+        }
+        
+        // Random formatting selection
+        function getWordFormatting() {
+            const roll = Math.random();
+            
+            if (roll < 0.65) {
+                return { class: '', isLink: false };           // 65% plain
+            } else if (roll < 0.77) {
+                return { class: 'word-italic', isLink: false }; // 12% italic
+            } else if (roll < 0.85) {
+                return { class: 'word-bold', isLink: false };   // 8% bold
+            } else if (roll < 0.91) {
+                return { class: 'word-smallcaps', isLink: false }; // 6% small caps
+            } else if (roll < 0.96) {
+                return { class: 'word-spaced', isLink: false }; // 5% letter-spaced
+            } else {
+                return { class: 'word-link', isLink: true };    // 4% refresh link
+            }
+        }
+        
+        function generateCrypticText() {
+            let html = '';
+            const lines = Math.floor(window.innerHeight / 18);
+            let currentFontSize = 14;
+            let wordCount = 0;
+            let inSpecialSequence = false;
+            let specialSequenceRemaining = 0;
+            let currentSpecialWords = [];
+            
+            for (let i = 0; i < lines; i++) {
+                const variation = (Math.random() - 0.5) * 12;
+                currentFontSize = Math.max(10, Math.min(24, currentFontSize + variation));
+                
+                let lineWords = [];
+                const targetWords = Math.floor(Math.random() * 5) + 8;
+                
+                for (let w = 0; w < targetWords; w++) {
+                    let word;
+                    let color = getWordColor();
+                    let formatting = getWordFormatting();
+                    
+                    if (wordCount > 0 && wordCount % 27 === 0 && !inSpecialSequence) {
+                        inSpecialSequence = true;
+                        specialSequenceRemaining = 3;
+                        const scripts = [cyrillicWords, japaneseWords, chineseWords];
+                        currentSpecialWords = scripts[Math.floor(Math.random() * scripts.length)];
+                    }
+                    
+                    if (inSpecialSequence && specialSequenceRemaining > 0) {
+                        word = currentSpecialWords[Math.floor(Math.random() * currentSpecialWords.length)];
+                        specialSequenceRemaining--;
+                        if (specialSequenceRemaining === 0) {
+                            inSpecialSequence = false;
+                        }
+                    } else {
+                        if (Math.random() > 0.25) {
+                            word = fragments[Math.floor(Math.random() * fragments.length)];
+                        } else {
+                            word = symbols[Math.floor(Math.random() * symbols.length)];
+                            // Symbols don't get special formatting
+                            formatting = { class: '', isLink: false };
+                        }
+                    }
+                    
+                    // Build the word span
+                    let classes = formatting.class;
+                    
+                    if (formatting.isLink) {
+                        // Refresh link - onclick reloads page
+                        lineWords.push(`<a class="word-link" style="color: ${color}; text-decoration-color: ${color};" onclick="location.reload(); return false;" href="#">${word}</a>`);
+                    } else {
+                        lineWords.push(`<span class="${classes}" style="color: ${color};">${word}</span>`);
+                    }
+                    
+                    wordCount++;
+                }
+                
+                const lineContent = lineWords.join(' ');
+                html += `<span class="text-line" style="font-size: ${currentFontSize}pt; line-height: ${currentFontSize * 1.2}pt;">${lineContent}</span>`;
+            }
+            return html;
+        }
+
+        // Text layer
+        const textLayer = document.getElementById('textLayer');
+        let baseHTML = generateCrypticText();
+        textLayer.innerHTML = baseHTML;
+        
+        // Extract glitchable word spans (exclude links and symbols)
+        const glitchTargets = [];
+        const textLines = textLayer.querySelectorAll('.text-line');
+        
+        textLines.forEach((line) => {
+            const wordSpans = line.querySelectorAll('span[style*="color"]');
+            wordSpans.forEach((span) => {
+                const text = span.textContent;
+                if (text.match(/[a-z]/i) && Math.random() > 0.85) {
+                    const charIndex = Math.floor(Math.random() * text.length);
+                    if (text[charIndex].match(/[a-z]/i)) {
+                        glitchTargets.push({
+                            span: span,
+                            charIndex: charIndex,
+                            originalText: text,
+                            originalColor: span.style.color
+                        });
+                    }
+                }
+            });
+        });
+
+        const alternateChars = 'abcdefghijklmnopqrstuvwxyzабвгдежзийклмнопрстуфхцчшщъыьэюя影深淵虚空永遠真実忘却沈黙境界暗号残骸陰影低語虛空永恆真理遺忘回音寂靜門檻密碼殘餘';
+        
+        function updateText() {
+            glitchTargets.forEach(target => {
+                if (Math.random() > 0.7) {
+                    const chars = target.originalText.split('');
+                    
+                    if (Math.random() > 0.5) {
+                        const replacement = alternateChars[Math.floor(Math.random() * alternateChars.length)];
+                        chars[target.charIndex] = replacement;
+                        
+                        if (Math.random() > 0.5) {
+                            const glitchHtml = chars.map((c, i) => {
+                                if (i === target.charIndex) {
+                                    return `<span class="glitch">${c}</span>`;
+                                }
+                                return c;
+                            }).join('');
+                            target.span.innerHTML = glitchHtml;
+                        } else {
+                            target.span.textContent = chars.join('');
+                        }
+                    } else {
+                        target.span.textContent = target.originalText;
+                    }
+                }
+            });
+        }
+
+        setInterval(updateText, 80);
+
+        // Vignette layer (spotlight)
+        const vignetteCanvas = document.getElementById('vignetteLayer');
+        const vignetteCtx = vignetteCanvas.getContext('2d');
+
+        function resizeVignette() {
+            vignetteCanvas.width = window.innerWidth;
+            vignetteCanvas.height = window.innerHeight;
+        }
+        resizeVignette();
+        window.addEventListener('resize', resizeVignette);
+
+        function drawVignette() {
+            smoothedVelocity += (cursorVelocity - smoothedVelocity) * 0.1;
+            cursorVelocity *= 0.95;
+            
+            if (waveActive) {
+                waveProgress += 0.15;
+                waveIntensity *= 0.98;
+                if (waveProgress > Math.PI * 2.5) {
+                    waveActive = false;
+                    waveIntensity = 0;
+                }
+            }
+            
+            spotlightX += (mouseX - spotlightX) * spotlightDragFactor;
+            spotlightY += (mouseY - spotlightY) * spotlightDragFactor;
+            
+            textLayer.style.setProperty('--mouse-x', spotlightX + 'px');
+            textLayer.style.setProperty('--mouse-y', spotlightY + 'px');
+            
+            vignetteCtx.clearRect(0, 0, vignetteCanvas.width, vignetteCanvas.height);
+            
+            vignetteCtx.fillStyle = '#0a0a0a';
+            vignetteCtx.fillRect(0, 0, vignetteCanvas.width, vignetteCanvas.height);
+            
+            vignetteCtx.globalCompositeOperation = 'destination-out';
+            vignetteCtx.beginPath();
+            vignetteCtx.arc(spotlightX, spotlightY, 175, 0, Math.PI * 2);
+            vignetteCtx.fill();
+            vignetteCtx.globalCompositeOperation = 'source-over';
+            
+            vignetteCtx.fillStyle = 'rgba(250, 250, 250, 0.95)';
+            vignetteCtx.beginPath();
+            vignetteCtx.arc(spotlightX, spotlightY, 175, 0, Math.PI * 2);
+            vignetteCtx.fill();
+            
+            requestAnimationFrame(drawVignette);
+        }
+        drawVignette();
+
+        // Edge layer
+        const edgeCanvas = document.getElementById('edgeLayer');
+        const edgeCtx = edgeCanvas.getContext('2d');
+        
+        function resizeEdge() {
+            edgeCanvas.width = window.innerWidth;
+            edgeCanvas.height = window.innerHeight;
+        }
+        resizeEdge();
+        window.addEventListener('resize', resizeEdge);
+
+        class EdgeParticle {
+            constructor(angleOffset) {
+                this.baseAngleOffset = angleOffset;
+                this.angleOffset = angleOffset + (Math.random() - 0.5) * 0.6;
+                this.currentAngleOffset = this.angleOffset;
+                this.baseRadius = 175;
+                this.radiusVariation = Math.random() * 100 + 15;
+                this.baseSize = Math.random() * 70 + 35;
+                this.size = this.baseSize;
+                this.rotation = Math.random() * Math.PI * 2;
+                this.rotationSpeed = (Math.random() - 0.5) * 0.015;
+                this.wobble = Math.random() * Math.PI * 2;
+                this.wobbleSpeed = (Math.random() - 0.5) * 0.025;
+                
+                this.attachedCenterX = window.innerWidth / 2;
+                this.attachedCenterY = window.innerHeight / 2;
+                this.attachmentFactor = 0.7 + Math.random() * 0.25;
+                
+                this.breatheSensitivity = 0.5 + Math.random() * 0.5;
+                this.waveSensitivity = 0.5 + Math.random() * 0.5;
+                this.driftSensitivity = 0.3 + Math.random() * 0.4;
+                
+                this.segments = Math.floor(Math.random() * 4) + 4;
+                this.angles = [];
+                this.lengths = [];
+                for (let i = 0; i < this.segments; i++) {
+                    this.angles.push(Math.random() * Math.PI * 2);
+                    this.lengths.push(0.5 + Math.random() * 0.7);
+                }
+            }
+
+            update(spotX, spotY, velocity, waveActive, waveProgress, waveOrigin, waveIntensity, moveAngle) {
+                this.rotation += this.rotationSpeed;
+                this.wobble += this.wobbleSpeed;
+                
+                this.attachedCenterX += (spotX - this.attachedCenterX) * this.attachmentFactor;
+                this.attachedCenterY += (spotY - this.attachedCenterY) * this.attachmentFactor;
+                
+                const breatheAmount = velocity * this.breatheSensitivity * 0.8;
+                this.size = this.baseSize + breatheAmount;
+                
+                let waveEffect = 0;
+                if (waveActive) {
+                    const waveAngle = waveOrigin + waveProgress;
+                    let angleDiff = this.baseAngleOffset - waveAngle;
+                    
+                    while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
+                    while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
+                    
+                    const waveWidth = 1.2;
+                    if (Math.abs(angleDiff) < waveWidth) {
+                        const waveStrength = (1 - Math.abs(angleDiff) / waveWidth);
+                        waveEffect = Math.sin(waveStrength * Math.PI) * waveIntensity * this.waveSensitivity * 40;
+                    }
+                }
+                
+                const targetAngleDrift = this.angleOffset + Math.sin(this.baseAngleOffset - moveAngle) * this.driftSensitivity * (velocity / 30);
+                this.currentAngleOffset += (targetAngleDrift - this.currentAngleOffset) * 0.05;
+                this.currentAngleOffset += (this.angleOffset - this.currentAngleOffset) * 0.02;
+                
+                this._waveEffect = waveEffect;
+            }
+
+            draw(ctx) {
+                const wobbleOffset = Math.sin(this.wobble) * 15;
+                const radius = this.baseRadius + this.radiusVariation + wobbleOffset + this._waveEffect;
+                const x = this.attachedCenterX + Math.cos(this.currentAngleOffset) * radius;
+                const y = this.attachedCenterY + Math.sin(this.currentAngleOffset) * radius;
+
+                ctx.save();
+                ctx.translate(x, y);
+                ctx.rotate(this.rotation);
+
+                ctx.fillStyle = '#0a0a0a';
+                ctx.beginPath();
+                
+                for (let i = 0; i < this.segments; i++) {
+                    const angle = this.angles[i];
+                    const length = this.lengths[i] * this.size;
+                    const px = Math.cos(angle) * length;
+                    const py = Math.sin(angle) * length;
+                    
+                    if (i === 0) {
+                        ctx.moveTo(px, py);
+                    } else {
+                        ctx.lineTo(px, py);
+                    }
+                }
+                
+                ctx.closePath();
+                ctx.fill();
+
+                ctx.fillRect(-this.size * 0.5, -this.size * 0.2, this.size * 1.0, this.size * 0.4);
+                ctx.fillRect(-this.size * 0.3, -this.size * 0.35, this.size * 0.6, this.size * 0.7);
+
+                ctx.restore();
+            }
+        }
+
+        const edgeParticles = [];
+        const numEdgeParticles = 600;
+        for (let i = 0; i < numEdgeParticles; i++) {
+            const angle = (i / numEdgeParticles) * Math.PI * 2;
+            edgeParticles.push(new EdgeParticle(angle));
+        }
+
+        function animateEdge() {
+            edgeCtx.clearRect(0, 0, edgeCanvas.width, edgeCanvas.height);
+
+            edgeParticles.forEach(particle => {
+                particle.update(
+                    spotlightX, 
+                    spotlightY, 
+                    smoothedVelocity,
+                    waveActive,
+                    waveProgress,
+                    waveOrigin,
+                    waveIntensity,
+                    movementAngle
+                );
+                particle.draw(edgeCtx);
+            });
+
+            requestAnimationFrame(animateEdge);
+        }
+        animateEdge();
+
+        // Void particle system
+        class Particle {
+            constructor(x, y, size, opacity, layer) {
+                this.x = x;
+                this.y = y;
+                this.baseX = x;
+                this.baseY = y;
+                this.size = size;
+                this.opacity = opacity;
+                this.layer = layer;
+                this.vx = 0;
+                this.vy = 0;
+                this.rotation = Math.random() * Math.PI * 2;
+                this.rotationSpeed = (Math.random() - 0.5) * 0.002;
+                
+                this.segments = Math.floor(Math.random() * 3) + 3;
+                this.angles = [];
+                this.lengths = [];
+                for (let i = 0; i < this.segments; i++) {
+                    this.angles.push(Math.random() * Math.PI * 2);
+                    this.lengths.push(0.5 + Math.random() * 0.5);
+                }
+            }
+
+            update(mx, my, repulsionStrength, returnStrength) {
+                const dx = this.x - mx;
+                const dy = this.y - my;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                const maxDistance = 150 * this.layer;
+
+                if (distance < maxDistance) {
+                    const force = (1 - distance / maxDistance) * repulsionStrength;
+                    const angle = Math.atan2(dy, dx);
+                    this.vx += Math.cos(angle) * force;
+                    this.vy += Math.sin(angle) * force;
+                }
+
+                this.vx += (this.baseX - this.x) * returnStrength;
+                this.vy += (this.baseY - this.y) * returnStrength;
+                this.vx *= 0.92;
+                this.vy *= 0.92;
+                this.x += this.vx;
+                this.y += this.vy;
+                this.rotation += this.rotationSpeed;
+            }
+
+            draw(ctx) {
+                ctx.save();
+                ctx.translate(this.x, this.y);
+                ctx.rotate(this.rotation);
+                ctx.globalAlpha = this.opacity;
+
+                ctx.fillStyle = '#000000';
+                ctx.beginPath();
+                
+                for (let i = 0; i < this.segments; i++) {
+                    const angle = this.angles[i];
+                    const length = this.lengths[i] * this.size;
+                    const x = Math.cos(angle) * length;
+                    const y = Math.sin(angle) * length;
+                    
+                    if (i === 0) {
+                        ctx.moveTo(x, y);
+                    } else {
+                        ctx.lineTo(x, y);
+                    }
+                }
+                
+                ctx.closePath();
+                ctx.fill();
+
+                ctx.globalAlpha = this.opacity * 0.3;
+                ctx.fillRect(-this.size * 0.3, -this.size * 0.1, this.size * 0.6, this.size * 0.2);
+
+                ctx.restore();
+            }
+        }
+
+        const layers = [
+            { 
+                canvas: document.getElementById('layer1'), 
+                particleCount: 180,
+                sizeRange: [8, 15],
+                opacity: 0.85,
+                layerDepth: 1,
+                repulsion: 0.8,
+                returnSpeed: 0.02
+            },
+            { 
+                canvas: document.getElementById('layer2'), 
+                particleCount: 140,
+                sizeRange: [15, 28],
+                opacity: 0.6,
+                layerDepth: 1.5,
+                repulsion: 0.5,
+                returnSpeed: 0.015
+            },
+            { 
+                canvas: document.getElementById('layer3'), 
+                particleCount: 100,
+                sizeRange: [28, 45],
+                opacity: 0.4,
+                layerDepth: 2,
+                repulsion: 0.35,
+                returnSpeed: 0.01
+            },
+            { 
+                canvas: document.getElementById('layer4'), 
+                particleCount: 60,
+                sizeRange: [45, 70],
+                opacity: 0.22,
+                layerDepth: 3,
+                repulsion: 0.2,
+                returnSpeed: 0.008
+            }
+        ];
+
+        const particleSystems = layers.map(config => {
+            const canvas = config.canvas;
+            const ctx = canvas.getContext('2d');
+            const particles = [];
+
+            function resize() {
+                canvas.width = window.innerWidth;
+                canvas.height = window.innerHeight;
+            }
+            resize();
+            window.addEventListener('resize', resize);
+
+            for (let i = 0; i < config.particleCount; i++) {
+                const x = Math.random() * canvas.width;
+                const y = Math.random() * canvas.height;
+                const size = config.sizeRange[0] + Math.random() * (config.sizeRange[1] - config.sizeRange[0]);
+                particles.push(new Particle(x, y, size, config.opacity, config.layerDepth));
+            }
+
+            function animate() {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+                particles.forEach(particle => {
+                    particle.update(mouseX, mouseY, config.repulsion, config.returnSpeed);
+                    particle.draw(ctx);
+                });
+
+                requestAnimationFrame(animate);
+            }
+            animate();
+
+            return { canvas, ctx, particles, config };
+        });
+
+        window.addEventListener('resize', () => {
+            baseHTML = generateCrypticText();
+            textLayer.innerHTML = baseHTML;
+            
+            glitchTargets.length = 0;
+            const newTextLines = textLayer.querySelectorAll('.text-line');
+            
+            newTextLines.forEach((line) => {
+                const wordSpans = line.querySelectorAll('span[style*="color"]');
+                wordSpans.forEach((span) => {
+                    const text = span.textContent;
+                    if (text.match(/[a-z]/i) && Math.random() > 0.85) {
+                        const charIndex = Math.floor(Math.random() * text.length);
+                        if (text[charIndex].match(/[a-z]/i)) {
+                            glitchTargets.push({
+                                span: span,
+                                charIndex: charIndex,
+                                originalText: text,
+                                originalColor: span.style.color
+                            });
+                        }
+                    }
+                });
+            });
+            
+            particleSystems.forEach(system => {
+                const newWidth = window.innerWidth;
+                const newHeight = window.innerHeight;
+                const oldWidth = system.canvas.width;
+                const oldHeight = system.canvas.height;
+
+                system.canvas.width = newWidth;
+                system.canvas.height = newHeight;
+
+                system.particles.forEach(particle => {
+                    particle.baseX = (particle.baseX / oldWidth) * newWidth;
+                    particle.baseY = (particle.baseY / oldHeight) * newHeight;
+                    particle.x = particle.baseX;
+                    particle.y = particle.baseY;
+                });
+            });
+        });
+    </script>
+</body>
+</html>
